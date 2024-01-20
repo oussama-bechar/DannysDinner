@@ -1,0 +1,51 @@
+-- What is the total amount each customer spent at the restaurant?
+WITH TOTAL_SPENT AS (SELECT customer_id, price FROM dannys_diner.sales INNER JOIN dannys_diner.menu ON dannys_diner.sales.product_id = dannys_diner.menu.product_id)
+SELECT customer_id, SUM(price) AS total FROM TOTAL_SPENT GROUP BY customer_id ORDER BY total;
+
+-- How many days has each customer visited the restaurant?
+SELECT customer_id, COUNT(DISTINCT order_date) FROM dannys_diner.sales GROUP BY customer_id;
+
+-- What was the first item from the menu purchased by each customer?
+WITH first_item AS (SELECT customer_id, product_id, order_date, row_number() OVER (partition by customer_id Order by order_date) AS first_purchase FROM dannys_diner.sales)
+SELECT customer_id, product_name FROM first_item INNER JOIN dannys_diner.menu ON first_item.product_id = dannys_diner.menu.product_id WHERE first_purchase = 1;
+
+
+-- What is the most purchased item on the menu and how many times was it purchased by all customers?
+WITH Total_times AS (SELECT product_id, COUNT(product_id) AS purchased_times FROM dannys_diner.sales GROUP BY product_id)
+SELECT product_name, purchased_times FROM Total_times INNER JOIN dannys_diner.menu ON Total_times.product_id = dannys_diner.menu.product_id;
+-- how many times was it purchased by all customers ?
+WITH Items AS (SELECT customer_id, product_name from dannys_diner.sales INNER JOIN dannys_diner.menu ON dannys_diner.sales.product_id = dannys_diner.menu.product_id)
+SELECT customer_id, COUNT(product_name) AS total FROM Items WHERE product_name = 'ramen' GROUP BY customer_id ;
+
+-- Which item was the most popular for each customer?
+SELECT customer_id, COUNT(CASE WHEN product_id = 1 then 1 END ) AS prod1, COUNT(CASE WHEN product_id = 2 then 1 END) AS prod2, COUNT(CASE WHEN product_id = 3 then 1 END) AS prod3 FROM dannys_diner.sales GROUP BY customer_id;
+
+-- Which item was purchased first by the customer after they became a member?
+WITH LIST_AFTER_MEMBERSHIP AS (SELECT product_id, dannys_diner.sales.customer_id, order_date, join_date FROM dannys_diner.sales INNER JOIN dannys_diner.members ON dannys_diner.sales.customer_id = dannys_diner.members.customer_id WHERE order_date >= join_date)
+, Full_list AS (SELECT customer_id, order_date, product_name FROM LIST_AFTER_MEMBERSHIP INNER JOIN dannys_diner.menu ON LIST_AFTER_MEMBERSHIP.product_id = dannys_diner.menu.product_id)
+, LAST_LIST AS (SELECT customer_id, row_number() OVER (partition by customer_id ORDER BY order_date) AS first_pro, product_name FROM Full_list)
+SELECT customer_id, product_name FROM LAST_LIST WHERE first_pro = 1;
+
+
+-- Which item was purchased just before the customer became a member?
+WITH LIST_BEFORE_MEMBERSHIP AS (SELECT product_id, dannys_diner.sales.customer_id, order_date, join_date FROM dannys_diner.sales INNER JOIN dannys_diner.members ON dannys_diner.sales.customer_id = dannys_diner.members.customer_id WHERE order_date < join_date)
+, Full_list AS (SELECT customer_id, order_date, product_name FROM LIST_BEFORE_MEMBERSHIP INNER JOIN dannys_diner.menu ON LIST_BEFORE_MEMBERSHIP.product_id = dannys_diner.menu.product_id)
+, LAST_LIST AS (SELECT customer_id, row_number() OVER (partition by customer_id ORDER BY order_date DESC) AS first_pro, product_name, order_date FROM Full_list)
+SELECT * FROM LAST_LIST WHERE first_pro = 1;
+
+-- What is the total items and amount spent for each member before they became a member?
+WITH Customers_list AS (SELECT dannys_diner.sales.customer_id, order_date, product_id, join_date  FROM dannys_diner.sales LEFT JOIN dannys_diner.members ON dannys_diner.sales.customer_id = dannys_diner.members.customer_id)
+, LIST_BEFORE as (SELECT customer_id, product_name, price FROM Customers_list LEFT JOIN dannys_diner.menu ON Customers_list.product_id = dannys_diner.menu.product_id WHERE order_date < join_date OR join_date is null)
+SELECT customer_id, COUNT(product_name) AS Total_items, SUM(price) AS total_amount_spent FROM LIST_BEFORE GROUP BY customer_id;
+
+-- If each $1 spent equates to 10 points and sushi has a 2x points multiplier - how many points would each customer have?
+WITH Points_earned AS (SELECT customer_id, price, product_name FROM dannys_diner.sales INNER JOIN dannys_diner.menu ON dannys_diner.sales.product_id =  dannys_diner.menu.product_id)
+SELECT customer_id, SUM(CASE WHEN product_name = 'sushi' THEN price * 20 ELSE price * 10 END ) AS points FROM points_earned GROUP BY customer_id;
+
+
+-- In the first week after a customer joins the program (including their join date) they earn 2x points on all items, not just sushi - how many points do customer A and B have at the end of January?
+WITH Special_Bonus AS (SELECT dannys_diner.sales.customer_id, price, product_name, order_date, join_date, (join_date + 7) AS seven_day_deal FROM dannys_diner.members INNER JOIN dannys_diner.sales ON dannys_diner.sales.customer_id = dannys_diner.members.customer_id INNER join dannys_diner.menu ON dannys_diner.sales.product_id = dannys_diner.menu.product_id WHERE order_date < '2021-02-01')
+SELECT customer_id, SUM(CASE WHEN order_date >= join_date AND order_date <= seven_day_deal THEN price * 20 WHEN order_date > seven_day_deal AND product_name = 'sushi' THEN price * 20 WHEN order_date > seven_day_deal AND product_name != 'sushi' THEN price * 10 END) AS Points_collected FROM Special_Bonus GROUP BY customer_id;
+
+
+-------- THANK YOU --------
